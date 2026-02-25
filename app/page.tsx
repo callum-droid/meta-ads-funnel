@@ -16,7 +16,7 @@ interface FormData {
   submittedAt: string | null;
 }
 
-// ─── CONCERN OPTIONS ──────────────────────────────────────────────
+// ─── DATA ─────────────────────────────────────────────────────────
 const CONCERN_OPTIONS = [
   { value: "crooked", icon: "😬", label: "Crooked Teeth" },
   { value: "gaps", icon: "🦷", label: "Gaps Between Teeth" },
@@ -43,6 +43,24 @@ const TIMELINE_OPTIONS = [
   { value: "exploring", label: "Just exploring options for now" },
 ];
 
+const TESTIMONIALS = [
+  {
+    name: "Sarah M.",
+    text: "Best decision I ever made. The team were brilliant from day one.",
+    rating: 5,
+  },
+  {
+    name: "James T.",
+    text: "Invisible aligners changed my confidence completely. Highly recommend!",
+    rating: 5,
+  },
+  {
+    name: "Emily R.",
+    text: "So professional and caring. My smile has never looked better.",
+    rating: 5,
+  },
+];
+
 const STEP_LABELS = ["Your Details", "Your Smile", "Goals", "Timeline"];
 
 // ─── COMPONENT ────────────────────────────────────────────────────
@@ -65,16 +83,62 @@ export default function SmileJourneyFunnel() {
   const [submitting, setSubmitting] = useState(false);
   const lastSavedStep = useRef(0);
 
-  // ─── PROGRESSIVE LEAD CAPTURE ─────────────────────────────────
-  // Fires after EVERY step so you always have the most recent data.
-  // Each save includes completedSteps + status so your CRM can see
-  // exactly where they dropped off.
-  //
-  // Step 1 → contact details only
-  // Step 2 → + smile concerns
-  // Step 3 → + treatment preference
-  // Step 4 → full submission (handled in handleSubmit)
+  // ─── EXIT INTENT POPUP ────────────────────────────────────────
+  const [showExitPopup, setShowExitPopup] = useState(false);
+  const [exitPhone, setExitPhone] = useState("");
+  const [exitSubmitted, setExitSubmitted] = useState(false);
+  const exitShown = useRef(false);
 
+  useEffect(() => {
+    const handleMouseLeave = (e: MouseEvent) => {
+      if (
+        e.clientY <= 0 &&
+        !exitShown.current &&
+        !submitted &&
+        lastSavedStep.current === 0
+      ) {
+        exitShown.current = true;
+        setShowExitPopup(true);
+      }
+    };
+    document.addEventListener("mouseleave", handleMouseLeave);
+    return () => document.removeEventListener("mouseleave", handleMouseLeave);
+  }, [submitted]);
+
+  const handleExitSubmit = () => {
+    if (exitPhone.replace(/\s/g, "").length < 7) return;
+    console.log(
+      "📞 EXIT-INTENT CALLBACK REQUEST:",
+      JSON.stringify({ phone: exitPhone, capturedAt: new Date().toISOString() }, null, 2)
+    );
+    // fetch('https://your-webhook-url.com/callback', {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json' },
+    //   body: JSON.stringify({ phone: exitPhone, source: 'exit-intent' })
+    // });
+    setExitSubmitted(true);
+    setTimeout(() => setShowExitPopup(false), 2500);
+  };
+
+  // ─── URGENCY: SPOTS REMAINING ─────────────────────────────────
+  // Generates a consistent "remaining slots" number per day so it
+  // doesn't change on every page refresh, but does change daily.
+  const [spotsLeft] = useState(() => {
+    const today = new Date();
+    const seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+    return (seed % 4) + 2; // yields 2–5
+  });
+
+  // ─── TESTIMONIAL CAROUSEL ─────────────────────────────────────
+  const [activeTestimonial, setActiveTestimonial] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveTestimonial((prev) => (prev + 1) % TESTIMONIALS.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ─── PROGRESSIVE LEAD CAPTURE ─────────────────────────────────
   const saveProgress = useCallback(
     (stepJustCompleted: number, data: FormData) => {
       if (stepJustCompleted <= lastSavedStep.current) return;
@@ -107,8 +171,6 @@ export default function SmileJourneyFunnel() {
     []
   );
 
-  // Fallback: capture on page unload if they filled step 1 fields
-  // but never pressed Continue
   useEffect(() => {
     const handleUnload = () => {
       if (lastSavedStep.current === 0 && currentStep === 1) {
@@ -124,30 +186,15 @@ export default function SmileJourneyFunnel() {
   // ─── VALIDATION ───────────────────────────────────────────────
   const validateStep = (step: number): boolean => {
     const newErrors: Record<string, string> = {};
-
     if (step === 1) {
-      if (!formData.firstName.trim())
-        newErrors.firstName = "Please enter your first name";
-      if (!formData.lastName.trim())
-        newErrors.lastName = "Please enter your last name";
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
-        newErrors.email = "Please enter a valid email address";
-      if (formData.phone.replace(/\s/g, "").length < 7)
-        newErrors.phone = "Please enter your phone number";
+      if (!formData.firstName.trim()) newErrors.firstName = "Please enter your first name";
+      if (!formData.lastName.trim()) newErrors.lastName = "Please enter your last name";
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = "Please enter a valid email address";
+      if (formData.phone.replace(/\s/g, "").length < 7) newErrors.phone = "Please enter your phone number";
     }
-
-    if (step === 2 && formData.concerns.length === 0) {
-      newErrors.concerns = "Please select at least one option";
-    }
-
-    if (step === 3 && !formData.treatment) {
-      newErrors.treatment = "Please select an option";
-    }
-
-    if (step === 4 && !formData.timeline) {
-      newErrors.timeline = "Please select a timeline";
-    }
-
+    if (step === 2 && formData.concerns.length === 0) newErrors.concerns = "Please select at least one option";
+    if (step === 3 && !formData.treatment) newErrors.treatment = "Please select an option";
+    if (step === 4 && !formData.timeline) newErrors.timeline = "Please select a timeline";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -155,72 +202,36 @@ export default function SmileJourneyFunnel() {
   // ─── NAVIGATION ───────────────────────────────────────────────
   const nextStep = () => {
     if (!validateStep(currentStep)) return;
-
-    const updatedData = {
-      ...formData,
-      completedSteps: Math.max(formData.completedSteps, currentStep),
-    };
-
+    const updatedData = { ...formData, completedSteps: Math.max(formData.completedSteps, currentStep) };
     setFormData(updatedData);
-
-    // 🔑 Save progress after every step
     saveProgress(currentStep, updatedData);
-
-    if (currentStep < 4) {
-      setCurrentStep((s) => s + 1);
-      setErrors({});
-    }
+    if (currentStep < 4) { setCurrentStep((s) => s + 1); setErrors({}); }
   };
 
   const prevStep = () => {
-    if (currentStep > 1) {
-      setCurrentStep((s) => s - 1);
-      setErrors({});
-    }
+    if (currentStep > 1) { setCurrentStep((s) => s - 1); setErrors({}); }
   };
 
-  // ─── CONCERN TOGGLE ───────────────────────────────────────────
   const toggleConcern = (value: string) => {
     setFormData((prev) => ({
       ...prev,
-      concerns: prev.concerns.includes(value)
-        ? prev.concerns.filter((c) => c !== value)
-        : [...prev.concerns, value],
+      concerns: prev.concerns.includes(value) ? prev.concerns.filter((c) => c !== value) : [...prev.concerns, value],
     }));
-    setErrors((prev) => {
-      const next = { ...prev };
-      delete next.concerns;
-      return next;
-    });
+    setErrors((prev) => { const next = { ...prev }; delete next.concerns; return next; });
   };
 
   // ─── SUBMIT ───────────────────────────────────────────────────
   const handleSubmit = () => {
     if (!validateStep(4)) return;
     setSubmitting(true);
-
-    const finalData = {
-      ...formData,
-      completedSteps: 4,
-      submittedAt: new Date().toISOString(),
-    };
-
-    console.log(
-      "✅ FULL FORM SUBMITTED:",
-      JSON.stringify(finalData, null, 2)
-    );
-
-    // ── Replace with your endpoint ──
+    const finalData = { ...formData, completedSteps: 4, submittedAt: new Date().toISOString() };
+    console.log("✅ FULL FORM SUBMITTED:", JSON.stringify(finalData, null, 2));
     // fetch('https://your-webhook-url.com/leads', {
     //   method: 'POST',
     //   headers: { 'Content-Type': 'application/json' },
     //   body: JSON.stringify({ ...finalData, status: 'complete' })
     // });
-
-    setTimeout(() => {
-      setSubmitted(true);
-      setSubmitting(false);
-    }, 1200);
+    setTimeout(() => { setSubmitted(true); setSubmitting(false); }, 1200);
   };
 
   // ─── RENDER ───────────────────────────────────────────────────
@@ -246,11 +257,7 @@ export default function SmileJourneyFunnel() {
           --shadow: 0 4px 24px rgba(27, 77, 110, 0.08);
         }
 
-        * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
           font-family: "DM Sans", sans-serif;
@@ -260,541 +267,402 @@ export default function SmileJourneyFunnel() {
         }
 
         @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(12px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
         }
-
         @keyframes fadeDown {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
         }
-
         @keyframes scaleIn {
-          from {
-            opacity: 0;
-            transform: scale(0.9);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1);
-          }
+          from { opacity: 0; transform: scale(0.9); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes slideUp {
+          from { opacity: 0; transform: translateY(30px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.6; }
+        }
+        @keyframes testimonialFade {
+          0% { opacity: 0; transform: translateX(10px); }
+          10% { opacity: 1; transform: translateX(0); }
+          90% { opacity: 1; transform: translateX(0); }
+          100% { opacity: 0; transform: translateX(-10px); }
         }
       `}</style>
 
-      <div style={styles.pageWrapper}>
-        {/* Background orbs */}
-        <div style={styles.orbTopRight} />
-        <div style={styles.orbBottomLeft} />
+      <div style={s.pageWrapper}>
+        <div style={s.orbTopRight} />
+        <div style={s.orbBottomLeft} />
 
-        <div style={styles.container}>
-          {/* Header */}
-          <div style={styles.header}>
-            <div style={styles.logoRow}>
-              <div style={styles.logoMark}>
+        <div style={s.container}>
+
+          {/* ── URGENCY BANNER ── */}
+          <div style={s.urgencyBanner}>
+            <span style={s.urgencyDot} />
+            <span>
+              <strong>Only {spotsLeft} free consultation slots left</strong> this month
+            </span>
+          </div>
+
+          {/* ── HEADER ── */}
+          <div style={s.header}>
+            <div style={s.logoRow}>
+              <div style={s.logoMark}>
                 <svg viewBox="0 0 64 64" width={30} height={30} fill="none">
-                  {/* Tooth icon */}
-                  <path
-                    d="M32 4c-5.5 0-10 1.5-13.5 4.5C15 11.5 13 16 13 21c0 4 1 7.5 2.5 11 1.5 3.5 2.5 7 3 10.5.8 5 2 10 3.5 13.5 1 2.3 2.5 4 4 4s2.5-1 3-3c.5-2 1-4.5 1.5-7h3c.5 2.5 1 5 1.5 7 .5 2 1.5 3 3 3s3-1.7 4-4c1.5-3.5 2.7-8.5 3.5-13.5.5-3.5 1.5-7 3-10.5C50 28.5 51 25 51 21c0-5-2-9.5-5.5-12.5C42 5.5 37.5 4 32 4z"
-                    fill="white"
-                  />
-                  {/* Smile arc on the tooth */}
-                  <path
-                    d="M25 26c2 3 4.5 4.5 7 4.5s5-1.5 7-4.5"
-                    stroke="var(--primary)"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    fill="none"
-                  />
+                  <path d="M32 4c-5.5 0-10 1.5-13.5 4.5C15 11.5 13 16 13 21c0 4 1 7.5 2.5 11 1.5 3.5 2.5 7 3 10.5.8 5 2 10 3.5 13.5 1 2.3 2.5 4 4 4s2.5-1 3-3c.5-2 1-4.5 1.5-7h3c.5 2.5 1 5 1.5 7 .5 2 1.5 3 3 3s3-1.7 4-4c1.5-3.5 2.7-8.5 3.5-13.5.5-3.5 1.5-7 3-10.5C50 28.5 51 25 51 21c0-5-2-9.5-5.5-12.5C42 5.5 37.5 4 32 4z" fill="white" />
+                  <path d="M25 26c2 3 4.5 4.5 7 4.5s5-1.5 7-4.5" stroke="var(--primary)" strokeWidth="2.5" strokeLinecap="round" fill="none" />
                 </svg>
               </div>
-              <div>
-                <span style={styles.brandName}>JXB Ortho</span>
-              </div>
+              <span style={s.brandName}>CAB Orthodontics</span>
             </div>
-            <h1 style={styles.headerTitle}>Start Your Smile Journey</h1>
-            <p style={styles.headerSubtitle}>
-              Book your free consultation in under 2 minutes
-            </p>
+            <h1 style={s.headerTitle}>Start Your Smile Journey</h1>
+            <p style={s.headerSubtitle}>Book your free consultation in under 2 minutes</p>
+
+            {/* ── FINANCE MESSAGING ── */}
+            <div style={s.financeBadge}>
+              Treatments from <strong>£49/month</strong> · 0% finance available
+            </div>
+          </div>
+
+          {/* ── SOCIAL PROOF STRIP ── */}
+          <div style={s.socialProof}>
+            <div style={s.starRow}>
+              {[1, 2, 3, 4, 5].map((i) => (
+                <svg key={i} viewBox="0 0 20 20" width={16} height={16} fill="#E8A54B">
+                  <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.33L10 13.27l-4.77 2.51.91-5.33L2.27 6.68l5.34-.78L10 1z" />
+                </svg>
+              ))}
+              <span style={s.ratingText}>4.9/5</span>
+              <span style={s.ratingCount}>from 500+ patients</span>
+            </div>
+            <div style={s.testimonialCarousel}>
+              {TESTIMONIALS.map((t, i) => (
+                <div
+                  key={i}
+                  style={{
+                    ...s.testimonialItem,
+                    display: i === activeTestimonial ? "block" : "none",
+                    animation: i === activeTestimonial ? "testimonialFade 4s ease-in-out" : "none",
+                  }}
+                >
+                  <span style={s.testimonialQuote}>&ldquo;{t.text}&rdquo;</span>
+                  <span style={s.testimonialName}>— {t.name}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
           {!submitted && (
             <>
               {/* Step labels */}
-              <div style={styles.stepLabelRow}>
+              <div style={s.stepLabelRow}>
                 {STEP_LABELS.map((label, i) => (
-                  <span
-                    key={label}
-                    style={{
-                      ...styles.stepLabelText,
-                      color:
-                        i + 1 === currentStep
-                          ? "var(--primary)"
-                          : "var(--text-light)",
-                    }}
-                  >
+                  <span key={label} style={{ ...s.stepLabelText, color: i + 1 === currentStep ? "var(--primary)" : "var(--text-light)" }}>
                     {label}
                   </span>
                 ))}
               </div>
 
               {/* Progress bar */}
-              <div style={styles.progressBar}>
+              <div style={s.progressBar}>
                 {[1, 2, 3, 4].map((step) => (
-                  <div
-                    key={step}
-                    style={{
-                      ...styles.progressStep,
-                      background:
-                        step < currentStep
-                          ? "var(--accent)"
-                          : step === currentStep
-                          ? "var(--primary)"
-                          : "var(--border)",
-                      boxShadow:
-                        step === currentStep
-                          ? "0 1px 6px rgba(27,77,110,0.3)"
-                          : "none",
-                    }}
-                  />
+                  <div key={step} style={{
+                    ...s.progressStep,
+                    background: step < currentStep ? "var(--accent)" : step === currentStep ? "var(--primary)" : "var(--border)",
+                    boxShadow: step === currentStep ? "0 1px 6px rgba(27,77,110,0.3)" : "none",
+                  }} />
                 ))}
               </div>
             </>
           )}
 
-          {/* Card */}
-          <div style={styles.card}>
-            <div style={styles.cardTopBorder} />
+          {/* ── CARD ── */}
+          <div style={s.card}>
+            <div style={s.cardTopBorder} />
 
-            {/* ── STEP 1: Contact Details ── */}
+            {/* STEP 1: Contact Details */}
             {currentStep === 1 && !submitted && (
               <div style={{ animation: "fadeIn 0.4s ease-out" }}>
-                <h2 style={styles.stepTitle}>Let&apos;s get started</h2>
-                <p style={styles.stepSubtitle}>
-                  Enter your details so we can personalise your smile journey
-                </p>
+                <h2 style={s.stepTitle}>Let&apos;s get started</h2>
+                <p style={s.stepSubtitle}>Enter your details so we can personalise your smile journey</p>
 
-                {(
-                  [
-                    {
-                      id: "firstName",
-                      label: "First Name",
-                      placeholder: "e.g. Sarah",
-                      type: "text",
-                    },
-                    {
-                      id: "lastName",
-                      label: "Last Name",
-                      placeholder: "e.g. Thompson",
-                      type: "text",
-                    },
-                    {
-                      id: "email",
-                      label: "Email Address",
-                      placeholder: "sarah@example.com",
-                      type: "email",
-                    },
-                    {
-                      id: "phone",
-                      label: "Phone Number",
-                      placeholder: "e.g. 07700 900000",
-                      type: "tel",
-                    },
-                  ] as const
-                ).map((field) => (
-                  <div key={field.id} style={styles.fieldGroup}>
-                    <label style={styles.label}>
-                      {field.label}{" "}
-                      <span style={{ color: "var(--error)", marginLeft: 2 }}>
-                        *
-                      </span>
+                {([
+                  { id: "firstName", label: "First Name", placeholder: "e.g. Sarah", type: "text" },
+                  { id: "lastName", label: "Last Name", placeholder: "e.g. Thompson", type: "text" },
+                  { id: "email", label: "Email Address", placeholder: "sarah@example.com", type: "email" },
+                  { id: "phone", label: "Phone Number", placeholder: "e.g. 07700 900000", type: "tel" },
+                ] as const).map((field) => (
+                  <div key={field.id} style={s.fieldGroup}>
+                    <label style={s.label}>
+                      {field.label} <span style={{ color: "var(--error)", marginLeft: 2 }}>*</span>
                     </label>
                     <input
                       type={field.type}
                       placeholder={field.placeholder}
                       value={formData[field.id]}
                       onChange={(e) => {
-                        setFormData((prev) => ({
-                          ...prev,
-                          [field.id]: e.target.value,
-                        }));
-                        setErrors((prev) => {
-                          const next = { ...prev };
-                          delete next[field.id];
-                          return next;
-                        });
+                        setFormData((prev) => ({ ...prev, [field.id]: e.target.value }));
+                        setErrors((prev) => { const next = { ...prev }; delete next[field.id]; return next; });
                       }}
                       style={{
-                        ...styles.input,
-                        borderColor: errors[field.id]
-                          ? "var(--error)"
-                          : "var(--border)",
-                        boxShadow: errors[field.id]
-                          ? "0 0 0 3px rgba(209,67,67,0.1)"
-                          : "none",
+                        ...s.input,
+                        borderColor: errors[field.id] ? "var(--error)" : "var(--border)",
+                        boxShadow: errors[field.id] ? "0 0 0 3px rgba(209,67,67,0.1)" : "none",
                       }}
                     />
-                    {errors[field.id] && (
-                      <span style={styles.fieldError}>{errors[field.id]}</span>
-                    )}
+                    {errors[field.id] && <span style={s.fieldError}>{errors[field.id]}</span>}
                   </div>
                 ))}
 
-                <div style={styles.btnRow}>
-                  <button style={styles.btnPrimary} onClick={nextStep}>
-                    Continue →
-                  </button>
+                <p style={s.privacyNote}>
+                  <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth={2} style={{ marginRight: 4, verticalAlign: "middle" }}>
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0110 0v4" />
+                  </svg>
+                  We&apos;ll never share your details. 100% confidential.
+                </p>
+
+                <div style={s.btnRow}>
+                  <button style={s.btnPrimary} onClick={nextStep}>Continue →</button>
                 </div>
               </div>
             )}
 
-            {/* ── STEP 2: Smile Concerns ── */}
+            {/* STEP 2: Smile Concerns */}
             {currentStep === 2 && !submitted && (
               <div style={{ animation: "fadeIn 0.4s ease-out" }}>
-                <h2 style={styles.stepTitle}>What brings you in?</h2>
-                <p style={styles.stepSubtitle}>
-                  Select the concerns you&apos;d like to address (choose all
-                  that apply)
-                </p>
+                <h2 style={s.stepTitle}>What brings you in?</h2>
+                <p style={s.stepSubtitle}>Select the concerns you&apos;d like to address (choose all that apply)</p>
 
-                <div style={styles.optionGrid}>
+                <div style={s.optionGrid}>
                   {CONCERN_OPTIONS.map((opt) => {
                     const selected = formData.concerns.includes(opt.value);
                     return (
-                      <div
-                        key={opt.value}
-                        onClick={() => toggleConcern(opt.value)}
-                        style={{
-                          ...styles.optionCard,
-                          borderColor: selected
-                            ? "var(--primary)"
-                            : "var(--border)",
-                          background: selected
-                            ? "rgba(27,77,110,0.06)"
-                            : "var(--bg)",
-                          boxShadow: selected
-                            ? "0 0 0 3px rgba(27,77,110,0.1)"
-                            : "none",
-                        }}
-                      >
+                      <div key={opt.value} onClick={() => toggleConcern(opt.value)} style={{
+                        ...s.optionCard,
+                        borderColor: selected ? "var(--primary)" : "var(--border)",
+                        background: selected ? "rgba(27,77,110,0.06)" : "var(--bg)",
+                        boxShadow: selected ? "0 0 0 3px rgba(27,77,110,0.1)" : "none",
+                      }}>
                         {selected && (
-                          <div style={styles.checkMark}>
-                            <svg
-                              viewBox="0 0 24 24"
-                              width={12}
-                              height={12}
-                              fill="none"
-                              stroke="white"
-                              strokeWidth={3}
-                            >
+                          <div style={s.checkMark}>
+                            <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="white" strokeWidth={3}>
                               <polyline points="20 6 9 17 4 12" />
                             </svg>
                           </div>
                         )}
-                        <span style={styles.optionIcon}>{opt.icon}</span>
-                        <span style={styles.optionLabel}>{opt.label}</span>
+                        <span style={s.optionIcon}>{opt.icon}</span>
+                        <span style={s.optionLabel}>{opt.label}</span>
                       </div>
                     );
                   })}
                 </div>
-                {errors.concerns && (
-                  <p style={styles.selectionError}>{errors.concerns}</p>
-                )}
+                {errors.concerns && <p style={s.selectionError}>{errors.concerns}</p>}
 
-                <div style={styles.btnRow}>
-                  <button style={styles.btnSecondary} onClick={prevStep}>
-                    ← Back
-                  </button>
-                  <button style={styles.btnPrimary} onClick={nextStep}>
-                    Continue →
-                  </button>
+                <p style={s.stepEncouragement}>Great progress — just 2 quick questions left!</p>
+
+                <div style={s.btnRow}>
+                  <button style={s.btnSecondary} onClick={prevStep}>← Back</button>
+                  <button style={s.btnPrimary} onClick={nextStep}>Continue →</button>
                 </div>
               </div>
             )}
 
-            {/* ── STEP 3: Treatment Preference ── */}
+            {/* STEP 3: Treatment Preference */}
             {currentStep === 3 && !submitted && (
               <div style={{ animation: "fadeIn 0.4s ease-out" }}>
-                <h2 style={styles.stepTitle}>Preferred treatment</h2>
-                <p style={styles.stepSubtitle}>
-                  Which treatment are you most interested in?
-                </p>
+                <h2 style={s.stepTitle}>Preferred treatment</h2>
+                <p style={s.stepSubtitle}>Which treatment are you most interested in?</p>
 
-                <div style={styles.optionList}>
+                <div style={s.optionList}>
                   {TREATMENT_OPTIONS.map((opt) => {
                     const selected = formData.treatment === opt.value;
                     return (
-                      <div
-                        key={opt.value}
-                        onClick={() => {
-                          setFormData((prev) => ({
-                            ...prev,
-                            treatment: opt.value,
-                          }));
-                          setErrors((prev) => {
-                            const next = { ...prev };
-                            delete next.treatment;
-                            return next;
-                          });
-                        }}
-                        style={{
-                          ...styles.optionItem,
-                          borderColor: selected
-                            ? "var(--primary)"
-                            : "var(--border)",
-                          background: selected
-                            ? "rgba(27,77,110,0.06)"
-                            : "var(--bg)",
-                          boxShadow: selected
-                            ? "0 0 0 3px rgba(27,77,110,0.1)"
-                            : "none",
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.radioCircle,
-                            borderColor: selected
-                              ? "var(--primary)"
-                              : "var(--border)",
-                            background: selected
-                              ? "var(--primary)"
-                              : "transparent",
-                          }}
-                        >
-                          {selected && <div style={styles.radioDot} />}
+                      <div key={opt.value} onClick={() => {
+                        setFormData((prev) => ({ ...prev, treatment: opt.value }));
+                        setErrors((prev) => { const next = { ...prev }; delete next.treatment; return next; });
+                      }} style={{
+                        ...s.optionItem,
+                        borderColor: selected ? "var(--primary)" : "var(--border)",
+                        background: selected ? "rgba(27,77,110,0.06)" : "var(--bg)",
+                        boxShadow: selected ? "0 0 0 3px rgba(27,77,110,0.1)" : "none",
+                      }}>
+                        <div style={{
+                          ...s.radioCircle,
+                          borderColor: selected ? "var(--primary)" : "var(--border)",
+                          background: selected ? "var(--primary)" : "transparent",
+                        }}>
+                          {selected && <div style={s.radioDot} />}
                         </div>
-                        <span style={styles.optionText}>{opt.label}</span>
+                        <span style={s.optionText}>{opt.label}</span>
                       </div>
                     );
                   })}
                 </div>
-                {errors.treatment && (
-                  <p style={styles.selectionError}>{errors.treatment}</p>
-                )}
+                {errors.treatment && <p style={s.selectionError}>{errors.treatment}</p>}
 
-                <div style={styles.btnRow}>
-                  <button style={styles.btnSecondary} onClick={prevStep}>
-                    ← Back
-                  </button>
-                  <button style={styles.btnPrimary} onClick={nextStep}>
-                    Continue →
-                  </button>
+                <p style={s.stepEncouragement}>Nearly there — one final step!</p>
+
+                <div style={s.btnRow}>
+                  <button style={s.btnSecondary} onClick={prevStep}>← Back</button>
+                  <button style={s.btnPrimary} onClick={nextStep}>Continue →</button>
                 </div>
               </div>
             )}
 
-            {/* ── STEP 4: Timeline ── */}
+            {/* STEP 4: Timeline */}
             {currentStep === 4 && !submitted && (
               <div style={{ animation: "fadeIn 0.4s ease-out" }}>
-                <h2 style={styles.stepTitle}>Your timeline</h2>
-                <p style={styles.stepSubtitle}>
-                  When are you looking to start treatment?
-                </p>
+                <h2 style={s.stepTitle}>Your timeline</h2>
+                <p style={s.stepSubtitle}>When are you looking to start treatment?</p>
 
-                <div style={styles.optionList}>
+                <div style={s.optionList}>
                   {TIMELINE_OPTIONS.map((opt) => {
                     const selected = formData.timeline === opt.value;
                     return (
-                      <div
-                        key={opt.value}
-                        onClick={() => {
-                          setFormData((prev) => ({
-                            ...prev,
-                            timeline: opt.value,
-                          }));
-                          setErrors((prev) => {
-                            const next = { ...prev };
-                            delete next.timeline;
-                            return next;
-                          });
-                        }}
-                        style={{
-                          ...styles.optionItem,
-                          borderColor: selected
-                            ? "var(--primary)"
-                            : "var(--border)",
-                          background: selected
-                            ? "rgba(27,77,110,0.06)"
-                            : "var(--bg)",
-                          boxShadow: selected
-                            ? "0 0 0 3px rgba(27,77,110,0.1)"
-                            : "none",
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.radioCircle,
-                            borderColor: selected
-                              ? "var(--primary)"
-                              : "var(--border)",
-                            background: selected
-                              ? "var(--primary)"
-                              : "transparent",
-                          }}
-                        >
-                          {selected && <div style={styles.radioDot} />}
+                      <div key={opt.value} onClick={() => {
+                        setFormData((prev) => ({ ...prev, timeline: opt.value }));
+                        setErrors((prev) => { const next = { ...prev }; delete next.timeline; return next; });
+                      }} style={{
+                        ...s.optionItem,
+                        borderColor: selected ? "var(--primary)" : "var(--border)",
+                        background: selected ? "rgba(27,77,110,0.06)" : "var(--bg)",
+                        boxShadow: selected ? "0 0 0 3px rgba(27,77,110,0.1)" : "none",
+                      }}>
+                        <div style={{
+                          ...s.radioCircle,
+                          borderColor: selected ? "var(--primary)" : "var(--border)",
+                          background: selected ? "var(--primary)" : "transparent",
+                        }}>
+                          {selected && <div style={s.radioDot} />}
                         </div>
-                        <span style={styles.optionText}>{opt.label}</span>
+                        <span style={s.optionText}>{opt.label}</span>
                       </div>
                     );
                   })}
                 </div>
-                {errors.timeline && (
-                  <p style={styles.selectionError}>{errors.timeline}</p>
-                )}
+                {errors.timeline && <p style={s.selectionError}>{errors.timeline}</p>}
 
-                {/* Previous treatment */}
                 <div style={{ marginTop: 20 }}>
-                  <label style={styles.label}>
-                    Have you had orthodontic treatment before?
-                  </label>
-                  <div style={{ ...styles.optionList, marginTop: 8 }}>
+                  <label style={s.label}>Have you had orthodontic treatment before?</label>
+                  <div style={{ ...s.optionList, marginTop: 8 }}>
                     {["Yes", "No"].map((opt) => {
                       const val = opt.toLowerCase();
                       const selected = formData.previousTreatment === val;
                       return (
-                        <div
-                          key={val}
-                          onClick={() =>
-                            setFormData((prev) => ({
-                              ...prev,
-                              previousTreatment: val,
-                            }))
-                          }
-                          style={{
-                            ...styles.optionItem,
-                            borderColor: selected
-                              ? "var(--primary)"
-                              : "var(--border)",
-                            background: selected
-                              ? "rgba(27,77,110,0.06)"
-                              : "var(--bg)",
-                            boxShadow: selected
-                              ? "0 0 0 3px rgba(27,77,110,0.1)"
-                              : "none",
-                          }}
-                        >
-                          <div
-                            style={{
-                              ...styles.radioCircle,
-                              borderColor: selected
-                                ? "var(--primary)"
-                                : "var(--border)",
-                              background: selected
-                                ? "var(--primary)"
-                                : "transparent",
-                            }}
-                          >
-                            {selected && <div style={styles.radioDot} />}
+                        <div key={val} onClick={() => setFormData((prev) => ({ ...prev, previousTreatment: val }))} style={{
+                          ...s.optionItem,
+                          borderColor: selected ? "var(--primary)" : "var(--border)",
+                          background: selected ? "rgba(27,77,110,0.06)" : "var(--bg)",
+                          boxShadow: selected ? "0 0 0 3px rgba(27,77,110,0.1)" : "none",
+                        }}>
+                          <div style={{
+                            ...s.radioCircle,
+                            borderColor: selected ? "var(--primary)" : "var(--border)",
+                            background: selected ? "var(--primary)" : "transparent",
+                          }}>
+                            {selected && <div style={s.radioDot} />}
                           </div>
-                          <span style={styles.optionText}>{opt}</span>
+                          <span style={s.optionText}>{opt}</span>
                         </div>
                       );
                     })}
                   </div>
                 </div>
 
-                <div style={styles.btnRow}>
-                  <button style={styles.btnSecondary} onClick={prevStep}>
-                    ← Back
-                  </button>
-                  <button
-                    style={{
-                      ...styles.btnSubmit,
-                      opacity: submitting ? 0.7 : 1,
-                      pointerEvents: submitting ? "none" : "auto",
-                    }}
-                    onClick={handleSubmit}
-                  >
+                <div style={s.btnRow}>
+                  <button style={s.btnSecondary} onClick={prevStep}>← Back</button>
+                  <button style={{
+                    ...s.btnSubmit,
+                    opacity: submitting ? 0.7 : 1,
+                    pointerEvents: submitting ? "none" : "auto",
+                  }} onClick={handleSubmit}>
                     {submitting ? "Submitting..." : "Book Free Consultation"}
                   </button>
                 </div>
               </div>
             )}
 
-            {/* ── SUCCESS ── */}
+            {/* SUCCESS */}
             {submitted && (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "20px 0",
-                  animation: "scaleIn 0.5s ease-out",
-                }}
-              >
-                <div style={styles.successIcon}>
-                  <svg
-                    viewBox="0 0 24 24"
-                    width={32}
-                    height={32}
-                    fill="none"
-                    stroke="white"
-                    strokeWidth={2.5}
-                  >
+              <div style={{ textAlign: "center", padding: "20px 0", animation: "scaleIn 0.5s ease-out" }}>
+                <div style={s.successIcon}>
+                  <svg viewBox="0 0 24 24" width={32} height={32} fill="none" stroke="white" strokeWidth={2.5}>
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 </div>
-                <h2 style={styles.successTitle}>You&apos;re All Set!</h2>
-                <p style={styles.successText}>
-                  Thank you for taking the first step. Our team will be in touch
-                  within 24 hours to book your free consultation.
+                <h2 style={s.successTitle}>You&apos;re All Set!</h2>
+                <p style={s.successText}>
+                  Thank you for taking the first step. Our team will be in touch within 24 hours to book your free consultation.
                 </p>
               </div>
             )}
           </div>
 
           {/* Trust badges */}
-          <div style={styles.trustRow}>
+          <div style={s.trustRow}>
             <TrustBadge icon="shield" text="100% Confidential" />
             <TrustBadge icon="check" text="Free Consultation" />
             <TrustBadge icon="clock" text="2 Min to Complete" />
           </div>
         </div>
       </div>
+
+      {/* ── EXIT-INTENT POPUP ── */}
+      {showExitPopup && (
+        <div style={s.exitOverlay} onClick={() => setShowExitPopup(false)}>
+          <div style={s.exitPopup} onClick={(e) => e.stopPropagation()}>
+            <button style={s.exitClose} onClick={() => setShowExitPopup(false)}>✕</button>
+
+            {!exitSubmitted ? (
+              <>
+                <div style={s.exitIcon}>📞</div>
+                <h3 style={s.exitTitle}>Wait — want us to call you instead?</h3>
+                <p style={s.exitSubtitle}>
+                  Leave your number and we&apos;ll ring you back within 15 minutes. No forms, no fuss.
+                </p>
+                <input
+                  type="tel"
+                  placeholder="Your phone number"
+                  value={exitPhone}
+                  onChange={(e) => setExitPhone(e.target.value)}
+                  style={s.exitInput}
+                />
+                <button style={s.exitBtn} onClick={handleExitSubmit}>
+                  Call Me Back
+                </button>
+                <p style={s.exitDisclaimer}>
+                  We&apos;ll only use this to arrange your free consultation
+                </p>
+              </>
+            ) : (
+              <div style={{ textAlign: "center", padding: "20px 0" }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+                <h3 style={s.exitTitle}>We&apos;ll call you shortly!</h3>
+                <p style={s.exitSubtitle}>Expect a call within 15 minutes.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }
 
-// ─── TRUST BADGE COMPONENT ────────────────────────────────────────
+// ─── TRUST BADGE ──────────────────────────────────────────────────
 function TrustBadge({ icon, text }: { icon: string; text: string }) {
-  const paths: Record<string, React.ReactNode> = {
-    shield: (
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    ),
-    check: (
-      <>
-        <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
-        <polyline points="22 4 12 14.01 9 11.01" />
-      </>
-    ),
-    clock: (
-      <>
-        <circle cx="12" cy="12" r="10" />
-        <polyline points="12 6 12 12 16 14" />
-      </>
-    ),
+  const paths: Record<string, JSX.Element> = {
+    shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
+    check: <><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></>,
+    clock: <><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></>,
   };
-
   return (
-    <div style={styles.trustItem}>
-      <svg
-        viewBox="0 0 24 24"
-        width={14}
-        height={14}
-        fill="none"
-        stroke="var(--text-light)"
-        strokeWidth={2}
-      >
+    <div style={s.trustItem}>
+      <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="var(--text-light)" strokeWidth={2}>
         {paths[icon]}
       </svg>
       <span>{text}</span>
@@ -803,364 +671,335 @@ function TrustBadge({ icon, text }: { icon: string; text: string }) {
 }
 
 // ─── STYLES ───────────────────────────────────────────────────────
-const styles: Record<string, React.CSSProperties> = {
+const s: Record<string, React.CSSProperties> = {
   pageWrapper: {
     minHeight: "100vh",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    padding: 20,
+    padding: "20px 20px 40px",
     position: "relative",
     overflow: "hidden",
   },
 
   orbTopRight: {
-    position: "fixed",
-    top: "-30%",
-    right: "-20%",
-    width: 600,
-    height: 600,
-    borderRadius: "50%",
-    background:
-      "radial-gradient(circle, rgba(27,77,110,0.06) 0%, transparent 70%)",
+    position: "fixed", top: "-30%", right: "-20%",
+    width: 600, height: 600, borderRadius: "50%",
+    background: "radial-gradient(circle, rgba(27,77,110,0.06) 0%, transparent 70%)",
     pointerEvents: "none",
   },
 
   orbBottomLeft: {
-    position: "fixed",
-    bottom: "-20%",
-    left: "-15%",
-    width: 500,
-    height: 500,
-    borderRadius: "50%",
-    background:
-      "radial-gradient(circle, rgba(232,165,75,0.07) 0%, transparent 70%)",
+    position: "fixed", bottom: "-20%", left: "-15%",
+    width: 500, height: 500, borderRadius: "50%",
+    background: "radial-gradient(circle, rgba(232,165,75,0.07) 0%, transparent 70%)",
     pointerEvents: "none",
   },
 
-  container: {
-    width: "100%",
-    maxWidth: 520,
-    position: "relative",
-    zIndex: 1,
-  },
+  container: { width: "100%", maxWidth: 520, position: "relative", zIndex: 1 },
 
-  header: {
-    textAlign: "center",
-    marginBottom: 28,
-    animation: "fadeDown 0.6s ease-out",
-  },
-
-  logoRow: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 18,
-  },
-
-  logoMark: {
+  // ── Urgency banner
+  urgencyBanner: {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    width: 52,
-    height: 52,
-    background: "var(--primary)",
-    borderRadius: 16,
-    boxShadow: "0 4px 16px rgba(27,77,110,0.25)",
+    gap: 8,
+    background: "linear-gradient(135deg, #1b4d6e, #2a6f9a)",
+    color: "white",
+    padding: "10px 16px",
+    borderRadius: 10,
+    fontSize: 13,
+    fontWeight: 500,
+    marginBottom: 20,
+    animation: "fadeDown 0.5s ease-out",
+  },
+
+  urgencyDot: {
+    width: 8, height: 8,
+    borderRadius: "50%",
+    background: "#E8A54B",
+    animation: "pulse 2s ease-in-out infinite",
     flexShrink: 0,
+  },
+
+  // ── Header
+  header: { textAlign: "center", marginBottom: 20, animation: "fadeDown 0.6s ease-out" },
+
+  logoRow: { display: "inline-flex", alignItems: "center", gap: 12, marginBottom: 14 },
+
+  logoMark: {
+    display: "flex", alignItems: "center", justifyContent: "center",
+    width: 52, height: 52, background: "var(--primary)",
+    borderRadius: 16, boxShadow: "0 4px 16px rgba(27,77,110,0.25)", flexShrink: 0,
   },
 
   brandName: {
     fontFamily: "'DM Serif Display', serif",
-    fontSize: 20,
-    color: "var(--primary)",
-    letterSpacing: "-0.01em",
-    lineHeight: 1.2,
+    fontSize: 20, color: "var(--primary)", letterSpacing: "-0.01em", lineHeight: 1.2,
   },
 
   headerTitle: {
     fontFamily: "'DM Serif Display', serif",
-    fontSize: 28,
-    fontWeight: 400,
-    color: "var(--primary)",
-    lineHeight: 1.2,
-    marginBottom: 8,
+    fontSize: 28, fontWeight: 400, color: "var(--primary)", lineHeight: 1.2, marginBottom: 8,
   },
 
-  headerSubtitle: {
-    color: "var(--text-muted)",
-    fontSize: 15,
-    lineHeight: 1.5,
+  headerSubtitle: { color: "var(--text-muted)", fontSize: 15, lineHeight: 1.5, marginBottom: 10 },
+
+  financeBadge: {
+    display: "inline-block",
+    background: "rgba(232,165,75,0.12)",
+    color: "#8B6020",
+    padding: "8px 16px",
+    borderRadius: 8,
+    fontSize: 13,
+    fontWeight: 500,
+    border: "1px solid rgba(232,165,75,0.25)",
   },
 
+  // ── Social proof
+  socialProof: {
+    background: "white",
+    borderRadius: 12,
+    padding: "14px 18px",
+    marginBottom: 20,
+    boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
+    border: "1px solid rgba(0,0,0,0.04)",
+    animation: "fadeDown 0.6s ease-out 0.15s both",
+  },
+
+  starRow: { display: "flex", alignItems: "center", gap: 3, marginBottom: 8 },
+
+  ratingText: { fontSize: 13, fontWeight: 700, color: "var(--text)", marginLeft: 6 },
+
+  ratingCount: { fontSize: 12, color: "var(--text-muted)", marginLeft: 4 },
+
+  testimonialCarousel: { minHeight: 40, position: "relative" },
+
+  testimonialItem: { },
+
+  testimonialQuote: {
+    fontSize: 13, fontStyle: "italic", color: "var(--text-muted)", lineHeight: 1.5,
+  },
+
+  testimonialName: {
+    fontSize: 12, fontWeight: 600, color: "var(--text)", marginLeft: 8,
+  },
+
+  // ── Step labels & progress
   stepLabelRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    marginBottom: 8,
-    padding: "0 4px",
+    display: "flex", justifyContent: "space-between",
+    marginBottom: 8, padding: "0 4px",
     animation: "fadeDown 0.6s ease-out 0.1s both",
   },
 
   stepLabelText: {
-    fontSize: 12,
-    fontWeight: 600,
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
-    transition: "color 0.3s",
+    fontSize: 12, fontWeight: 600, textTransform: "uppercase",
+    letterSpacing: "0.08em", transition: "color 0.3s",
   },
 
   progressBar: {
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 24,
-    padding: "0 4px",
+    display: "flex", alignItems: "center", gap: 6,
+    marginBottom: 24, padding: "0 4px",
     animation: "fadeDown 0.6s ease-out 0.1s both",
   },
 
   progressStep: {
-    flex: 1,
-    height: 5,
-    borderRadius: 100,
+    flex: 1, height: 5, borderRadius: 100,
     transition: "background 0.5s ease, box-shadow 0.5s ease",
   },
 
+  // ── Card
   card: {
-    background: "var(--bg-card)",
-    borderRadius: "var(--radius)",
-    boxShadow: "var(--shadow)",
-    padding: "36px 32px",
-    position: "relative",
-    overflow: "hidden",
+    background: "var(--bg-card)", borderRadius: "var(--radius)",
+    boxShadow: "var(--shadow)", padding: "36px 32px",
+    position: "relative", overflow: "hidden",
     border: "1px solid rgba(0,0,0,0.04)",
   },
 
   cardTopBorder: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 3,
+    position: "absolute", top: 0, left: 0, right: 0, height: 3,
     background: "linear-gradient(90deg, var(--primary), var(--accent))",
   },
 
   stepTitle: {
     fontFamily: "'DM Serif Display', serif",
-    fontSize: 22,
-    color: "var(--primary)",
-    marginBottom: 6,
+    fontSize: 22, color: "var(--primary)", marginBottom: 6,
   },
 
-  stepSubtitle: {
-    color: "var(--text-muted)",
-    fontSize: 14,
-    marginBottom: 28,
-    lineHeight: 1.5,
+  stepSubtitle: { color: "var(--text-muted)", fontSize: 14, marginBottom: 28, lineHeight: 1.5 },
+
+  stepEncouragement: {
+    fontSize: 13, color: "var(--success)", fontWeight: 500,
+    textAlign: "center", marginTop: 4,
   },
 
+  // ── Form fields
   fieldGroup: { marginBottom: 18 },
 
   label: {
-    display: "block",
-    fontSize: 13,
-    fontWeight: 600,
-    color: "var(--text)",
-    marginBottom: 7,
-    letterSpacing: "0.01em",
+    display: "block", fontSize: 13, fontWeight: 600,
+    color: "var(--text)", marginBottom: 7, letterSpacing: "0.01em",
   },
 
   input: {
-    width: "100%",
-    padding: "13px 16px",
-    border: "1.5px solid var(--border)",
-    borderRadius: 10,
-    fontFamily: "'DM Sans', sans-serif",
-    fontSize: 15,
-    color: "var(--text)",
-    background: "var(--bg)",
-    outline: "none",
-    transition: "border-color 0.25s, box-shadow 0.25s, background 0.25s",
+    width: "100%", padding: "13px 16px",
+    border: "1.5px solid var(--border)", borderRadius: 10,
+    fontFamily: "'DM Sans', sans-serif", fontSize: 15,
+    color: "var(--text)", background: "var(--bg)",
+    outline: "none", transition: "border-color 0.25s, box-shadow 0.25s, background 0.25s",
   },
 
-  fieldError: {
-    fontSize: 12,
-    color: "var(--error)",
-    marginTop: 5,
-    display: "block",
+  fieldError: { fontSize: 12, color: "var(--error)", marginTop: 5, display: "block" },
+
+  privacyNote: {
+    fontSize: 12, color: "var(--text-light)", marginTop: 4, marginBottom: 0,
+    display: "flex", alignItems: "center",
   },
 
-  optionGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 10,
-    marginBottom: 18,
-  },
+  // ── Options
+  optionGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 },
 
   optionCard: {
-    position: "relative",
-    padding: "16px 14px",
-    border: "1.5px solid var(--border)",
-    borderRadius: 12,
-    cursor: "pointer",
-    transition: "all 0.25s ease",
-    textAlign: "center",
+    position: "relative", padding: "16px 14px",
+    border: "1.5px solid var(--border)", borderRadius: 12,
+    cursor: "pointer", transition: "all 0.25s ease", textAlign: "center",
   },
 
   checkMark: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    width: 20,
-    height: 20,
-    borderRadius: "50%",
-    background: "var(--primary)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
+    position: "absolute", top: 8, right: 8, width: 20, height: 20,
+    borderRadius: "50%", background: "var(--primary)",
+    display: "flex", alignItems: "center", justifyContent: "center",
   },
 
   optionIcon: { fontSize: 26, marginBottom: 8, display: "block" },
 
-  optionLabel: {
-    fontSize: 13,
-    fontWeight: 600,
-    color: "var(--text)",
-    lineHeight: 1.3,
-  },
+  optionLabel: { fontSize: 13, fontWeight: 600, color: "var(--text)", lineHeight: 1.3 },
 
-  optionList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 8,
-    marginBottom: 18,
-  },
+  optionList: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 },
 
   optionItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    padding: "14px 16px",
-    border: "1.5px solid var(--border)",
-    borderRadius: 12,
-    cursor: "pointer",
-    transition: "all 0.25s ease",
+    display: "flex", alignItems: "center", gap: 12, padding: "14px 16px",
+    border: "1.5px solid var(--border)", borderRadius: 12,
+    cursor: "pointer", transition: "all 0.25s ease",
   },
 
   radioCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: "50%",
-    border: "2px solid var(--border)",
-    flexShrink: 0,
-    transition: "all 0.25s",
-    position: "relative",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
+    width: 20, height: 20, borderRadius: "50%", border: "2px solid var(--border)",
+    flexShrink: 0, transition: "all 0.25s", position: "relative",
+    display: "flex", alignItems: "center", justifyContent: "center",
   },
 
-  radioDot: {
-    width: 8,
-    height: 8,
-    borderRadius: "50%",
-    background: "white",
-  },
+  radioDot: { width: 8, height: 8, borderRadius: "50%", background: "white" },
 
   optionText: { fontSize: 14, fontWeight: 500, color: "var(--text)" },
 
-  selectionError: {
-    fontSize: 12,
-    color: "var(--error)",
-    marginTop: -10,
-    marginBottom: 12,
-  },
+  selectionError: { fontSize: 12, color: "var(--error)", marginTop: -10, marginBottom: 12 },
 
+  // ── Buttons
   btnRow: { display: "flex", gap: 10, marginTop: 28 },
 
   btnPrimary: {
-    flex: 1,
-    padding: "14px 24px",
-    borderRadius: 10,
-    fontFamily: "'DM Sans', sans-serif",
-    fontSize: 15,
-    fontWeight: 600,
-    cursor: "pointer",
-    border: "none",
-    background: "var(--primary)",
-    color: "white",
-    boxShadow: "0 4px 14px rgba(27,77,110,0.3)",
+    flex: 1, padding: "14px 24px", borderRadius: 10,
+    fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 600,
+    cursor: "pointer", border: "none", background: "var(--primary)",
+    color: "white", boxShadow: "0 4px 14px rgba(27,77,110,0.3)",
     transition: "all 0.25s ease",
   },
 
   btnSecondary: {
-    padding: "14px 20px",
-    borderRadius: 10,
-    fontFamily: "'DM Sans', sans-serif",
-    fontSize: 15,
-    fontWeight: 600,
-    cursor: "pointer",
-    background: "transparent",
-    color: "var(--text-muted)",
-    border: "1.5px solid var(--border)",
-    transition: "all 0.25s ease",
+    padding: "14px 20px", borderRadius: 10,
+    fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 600,
+    cursor: "pointer", background: "transparent", color: "var(--text-muted)",
+    border: "1.5px solid var(--border)", transition: "all 0.25s ease",
   },
 
   btnSubmit: {
-    flex: 1,
-    padding: "14px 24px",
-    borderRadius: 10,
-    fontFamily: "'DM Sans', sans-serif",
-    fontSize: 15,
-    fontWeight: 600,
-    cursor: "pointer",
-    border: "none",
-    background: "var(--accent)",
-    color: "white",
-    boxShadow: "0 4px 14px rgba(232,165,75,0.35)",
+    flex: 1, padding: "14px 24px", borderRadius: 10,
+    fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 600,
+    cursor: "pointer", border: "none", background: "var(--accent)",
+    color: "white", boxShadow: "0 4px 14px rgba(232,165,75,0.35)",
     transition: "all 0.25s ease",
   },
 
+  // ── Success
   successIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: "50%",
+    width: 72, height: 72, borderRadius: "50%",
     background: "linear-gradient(135deg, var(--success), #34A065)",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
-    boxShadow: "0 8px 24px rgba(45,138,86,0.3)",
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    marginBottom: 20, boxShadow: "0 8px 24px rgba(45,138,86,0.3)",
   },
 
   successTitle: {
     fontFamily: "'DM Serif Display', serif",
-    fontSize: 24,
-    color: "var(--primary)",
-    marginBottom: 10,
+    fontSize: 24, color: "var(--primary)", marginBottom: 10,
   },
 
-  successText: {
-    color: "var(--text-muted)",
-    fontSize: 14,
-    lineHeight: 1.6,
-    maxWidth: 340,
-    margin: "0 auto",
-  },
+  successText: { color: "var(--text-muted)", fontSize: 14, lineHeight: 1.6, maxWidth: 340, margin: "0 auto" },
 
+  // ── Trust badges
   trustRow: {
-    display: "flex",
-    justifyContent: "center",
-    gap: 24,
-    marginTop: 20,
+    display: "flex", justifyContent: "center", gap: 24, marginTop: 20,
     animation: "fadeDown 0.6s ease-out 0.3s both",
   },
 
-  trustItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    fontSize: 12,
-    color: "var(--text-light)",
+  trustItem: { display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-light)" },
+
+  // ── Exit-intent popup
+  exitOverlay: {
+    position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    zIndex: 9999, padding: 20, backdropFilter: "blur(4px)",
+    animation: "fadeIn 0.3s ease-out",
+  },
+
+  exitPopup: {
+    background: "white", borderRadius: 20, padding: "36px 32px",
+    maxWidth: 400, width: "100%", position: "relative",
+    boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+    animation: "slideUp 0.4s ease-out",
+    textAlign: "center",
+  },
+
+  exitClose: {
+    position: "absolute", top: 14, right: 16,
+    background: "none", border: "none", fontSize: 20,
+    color: "var(--text-light)", cursor: "pointer",
+    width: 32, height: 32, borderRadius: "50%",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    transition: "background 0.2s",
+  },
+
+  exitIcon: { fontSize: 48, marginBottom: 12 },
+
+  exitTitle: {
+    fontFamily: "'DM Serif Display', serif",
+    fontSize: 22, color: "var(--primary)", marginBottom: 8,
+  },
+
+  exitSubtitle: {
+    fontSize: 14, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 20,
+  },
+
+  exitInput: {
+    width: "100%", padding: "14px 16px",
+    border: "1.5px solid var(--border)", borderRadius: 10,
+    fontFamily: "'DM Sans', sans-serif", fontSize: 15,
+    color: "var(--text)", background: "var(--bg)",
+    outline: "none", marginBottom: 12,
+    textAlign: "center",
+  },
+
+  exitBtn: {
+    width: "100%", padding: "14px 24px", borderRadius: 10,
+    fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 600,
+    cursor: "pointer", border: "none",
+    background: "var(--accent)", color: "white",
+    boxShadow: "0 4px 14px rgba(232,165,75,0.35)",
+    transition: "all 0.25s ease",
+  },
+
+  exitDisclaimer: {
+    fontSize: 11, color: "var(--text-light)", marginTop: 12,
   },
 };
