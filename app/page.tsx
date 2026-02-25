@@ -121,12 +121,10 @@ export default function SmileJourneyFunnel() {
   };
 
   // ─── URGENCY: SPOTS REMAINING ─────────────────────────────────
-  // Generates a consistent "remaining slots" number per day so it
-  // doesn't change on every page refresh, but does change daily.
   const [spotsLeft] = useState(() => {
     const today = new Date();
     const seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
-    return (seed % 4) + 2; // yields 2–5
+    return (seed % 4) + 2;
   });
 
   // ─── TESTIMONIAL CAROUSEL ─────────────────────────────────────
@@ -303,7 +301,7 @@ export default function SmileJourneyFunnel() {
           {/* ── URGENCY BANNER ── */}
           <div style={s.urgencyBanner}>
             <span style={s.urgencyDot} />
-            <span>
+            <span suppressHydrationWarning>
               <strong>Only {spotsLeft} free consultation slots left</strong> this month
             </span>
           </div>
