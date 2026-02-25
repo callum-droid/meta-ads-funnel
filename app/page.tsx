@@ -655,7 +655,7 @@ export default function SmileJourneyFunnel() {
 
 // ─── TRUST BADGE ──────────────────────────────────────────────────
 function TrustBadge({ icon, text }: { icon: string; text: string }) {
-  const paths: Record<string, JSX.Element> = {
+  const paths: Record<string, React.ReactNode> = {
     shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
     check: <><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></>,
     clock: <><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></>,
