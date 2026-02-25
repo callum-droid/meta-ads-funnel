@@ -767,7 +767,7 @@ export default function SmileJourneyFunnel() {
 
 // ─── TRUST BADGE COMPONENT ────────────────────────────────────────
 function TrustBadge({ icon, text }: { icon: string; text: string }) {
-  const paths: Record<string, JSX.Element> = {
+  const paths: Record<string, React.ReactNode> = {
     shield: (
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
     ),
