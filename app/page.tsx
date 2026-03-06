@@ -44,12 +44,6 @@ const TIMELINE_OPTIONS = [
 ];
 
 
-const TESTIMONIALS = [
-  { text: "I never thought I could afford straight teeth — the finance option made it so easy!", name: "Sarah, 28" },
-  { text: "The whole process was quick and painless. My smile has completely transformed.", name: "James, 34" },
-  { text: "Best decision I ever made. The team were so friendly and professional.", name: "Emily, 25" },
-];
-
 const STEP_LABELS = ["Your Details", "Your Smile", "Goals", "Timeline"];
 
 // ─── COMPONENT ────────────────────────────────────────────────────
@@ -72,15 +66,6 @@ export default function SmileJourneyFunnel() {
   const [submitting, setSubmitting] = useState(false);
   const lastSavedStep = useRef(0);
   const cardRef = useRef<HTMLDivElement>(null);
-
-  // ─── TESTIMONIAL CAROUSEL ────────────────────────────────────
-  const [activeTestimonial, setActiveTestimonial] = useState(0);
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveTestimonial((prev) => (prev + 1) % TESTIMONIALS.length);
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
 
   // ─── EXIT INTENT POPUP ────────────────────────────────────────
   const [showExitPopup, setShowExitPopup] = useState(false);
@@ -326,10 +311,6 @@ export default function SmileJourneyFunnel() {
             font-size: 12px !important;
             padding: 6px 12px !important;
           }
-          /* Collapse social proof after step 1 */
-          .social-proof-section.collapsed {
-            display: none !important;
-          }
           /* Compact progress: hide step labels, show compact indicator */
           .step-labels-desktop {
             display: none !important;
@@ -422,39 +403,6 @@ export default function SmileJourneyFunnel() {
               Treatments from <strong>£49/month</strong> · 0% finance available
             </div>
           </div>
-
-          {/* ── SOCIAL PROOF STRIP (hidden on step 1) ── */}
-          {currentStep > 1 && (
-            <div
-              style={s.socialProof}
-              className={`social-proof-section${currentStep > 1 ? " collapsed" : ""}`}
-            >
-              <div style={s.starRow}>
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <svg key={i} viewBox="0 0 20 20" width={16} height={16} fill="#E8A54B">
-                    <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.33L10 13.27l-4.77 2.51.91-5.33L2.27 6.68l5.34-.78L10 1z" />
-                  </svg>
-                ))}
-                <span style={s.ratingText}>4.9/5</span>
-                <span style={s.ratingCount}>from 500+ patients</span>
-              </div>
-              <div style={s.testimonialCarousel}>
-                {TESTIMONIALS.map((t, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      ...s.testimonialItem,
-                      display: i === activeTestimonial ? "block" : "none",
-                      animation: i === activeTestimonial ? "testimonialFade 4s ease-in-out" : "none",
-                    }}
-                  >
-                    <span style={s.testimonialQuote}>&ldquo;{t.text}&rdquo;</span>
-                    <span style={s.testimonialName}>— {t.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {!submitted && (
             <>
@@ -889,35 +837,6 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 500,
     border: "1px solid rgba(232,165,75,0.25)",
-  },
-
-  // ── Social proof
-  socialProof: {
-    background: "white",
-    borderRadius: 12,
-    padding: "14px 18px",
-    marginBottom: 20,
-    boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
-    border: "1px solid rgba(0,0,0,0.04)",
-    animation: "fadeDown 0.6s ease-out 0.15s both",
-  },
-
-  starRow: { display: "flex", alignItems: "center", gap: 3, marginBottom: 8 },
-
-  ratingText: { fontSize: 13, fontWeight: 700, color: "var(--text)", marginLeft: 6 },
-
-  ratingCount: { fontSize: 12, color: "var(--text-muted)", marginLeft: 4 },
-
-  testimonialCarousel: { minHeight: 40, position: "relative" },
-
-  testimonialItem: { },
-
-  testimonialQuote: {
-    fontSize: 13, fontStyle: "italic", color: "var(--text-muted)", lineHeight: 1.5,
-  },
-
-  testimonialName: {
-    fontSize: 12, fontWeight: 600, color: "var(--text)", marginLeft: 8,
   },
 
   // ── Step labels & progress
