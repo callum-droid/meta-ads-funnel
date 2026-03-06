@@ -43,22 +43,11 @@ const TIMELINE_OPTIONS = [
   { value: "exploring", label: "Just exploring options for now" },
 ];
 
+
 const TESTIMONIALS = [
-  {
-    name: "Sarah M.",
-    text: "Best decision I ever made. The team were brilliant from day one.",
-    rating: 5,
-  },
-  {
-    name: "James T.",
-    text: "Invisible aligners changed my confidence completely. Highly recommend!",
-    rating: 5,
-  },
-  {
-    name: "Emily R.",
-    text: "So professional and caring. My smile has never looked better.",
-    rating: 5,
-  },
+  { text: "I never thought I could afford straight teeth — the finance option made it so easy!", name: "Sarah, 28" },
+  { text: "The whole process was quick and painless. My smile has completely transformed.", name: "James, 34" },
+  { text: "Best decision I ever made. The team were so friendly and professional.", name: "Emily, 25" },
 ];
 
 const STEP_LABELS = ["Your Details", "Your Smile", "Goals", "Timeline"];
@@ -82,6 +71,16 @@ export default function SmileJourneyFunnel() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const lastSavedStep = useRef(0);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // ─── TESTIMONIAL CAROUSEL ────────────────────────────────────
+  const [activeTestimonial, setActiveTestimonial] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveTestimonial((prev) => (prev + 1) % TESTIMONIALS.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
 
   // ─── EXIT INTENT POPUP ────────────────────────────────────────
   const [showExitPopup, setShowExitPopup] = useState(false);
@@ -111,11 +110,6 @@ export default function SmileJourneyFunnel() {
       "📞 EXIT-INTENT CALLBACK REQUEST:",
       JSON.stringify({ phone: exitPhone, capturedAt: new Date().toISOString() }, null, 2)
     );
-    // fetch('https://your-webhook-url.com/callback', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ phone: exitPhone, source: 'exit-intent' })
-    // });
     setExitSubmitted(true);
     setTimeout(() => setShowExitPopup(false), 2500);
   };
@@ -127,14 +121,19 @@ export default function SmileJourneyFunnel() {
     return (seed % 4) + 2;
   });
 
-  // ─── TESTIMONIAL CAROUSEL ─────────────────────────────────────
-  const [activeTestimonial, setActiveTestimonial] = useState(0);
+  // ─── SCROLL TO TOP ON STEP CHANGE ──────────────────────────────
   useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveTestimonial((prev) => (prev + 1) % TESTIMONIALS.length);
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
+    if (cardRef.current) {
+      cardRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [currentStep]);
+
+  // ─── TAP FEEDBACK STATE ─────────────────────────────────────────
+  const [tappedOption, setTappedOption] = useState<string | null>(null);
+  const triggerTap = (key: string) => {
+    setTappedOption(key);
+    setTimeout(() => setTappedOption(null), 200);
+  };
 
   // ─── PROGRESSIVE LEAD CAPTURE ─────────────────────────────────
   const saveProgress = useCallback(
@@ -158,13 +157,6 @@ export default function SmileJourneyFunnel() {
         `💾 PROGRESS SAVED (step ${stepJustCompleted}/4):`,
         JSON.stringify(payload, null, 2)
       );
-
-      // ── Replace with your endpoint ──
-      // fetch('https://your-webhook-url.com/leads', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(payload)
-      // });
     },
     []
   );
@@ -211,11 +203,28 @@ export default function SmileJourneyFunnel() {
   };
 
   const toggleConcern = (value: string) => {
+    triggerTap(`concern-${value}`);
     setFormData((prev) => ({
       ...prev,
       concerns: prev.concerns.includes(value) ? prev.concerns.filter((c) => c !== value) : [...prev.concerns, value],
     }));
     setErrors((prev) => { const next = { ...prev }; delete next.concerns; return next; });
+  };
+
+  // ─── AUTO-ADVANCE for single-select steps ─────────────────────
+  const selectTreatmentAndAdvance = (value: string) => {
+    triggerTap(`treatment-${value}`);
+    const updated = { ...formData, treatment: value, completedSteps: Math.max(formData.completedSteps, 3) };
+    setFormData(updated);
+    setErrors({});
+    saveProgress(3, updated);
+    setTimeout(() => setCurrentStep(4), 300);
+  };
+
+  const selectTimelineAndContinue = (value: string) => {
+    triggerTap(`timeline-${value}`);
+    setFormData((prev) => ({ ...prev, timeline: value }));
+    setErrors((prev) => { const next = { ...prev }; delete next.timeline; return next; });
   };
 
   // ─── SUBMIT ───────────────────────────────────────────────────
@@ -224,11 +233,6 @@ export default function SmileJourneyFunnel() {
     setSubmitting(true);
     const finalData = { ...formData, completedSteps: 4, submittedAt: new Date().toISOString() };
     console.log("✅ FULL FORM SUBMITTED:", JSON.stringify(finalData, null, 2));
-    // fetch('https://your-webhook-url.com/leads', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ ...finalData, status: 'complete' })
-    // });
     setTimeout(() => { setSubmitted(true); setSubmitting(false); }, 1200);
   };
 
@@ -284,22 +288,115 @@ export default function SmileJourneyFunnel() {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.6; }
         }
-        @keyframes testimonialFade {
-          0% { opacity: 0; transform: translateX(10px); }
-          10% { opacity: 1; transform: translateX(0); }
-          90% { opacity: 1; transform: translateX(0); }
-          100% { opacity: 0; transform: translateX(-10px); }
+        @keyframes tapBounce {
+          0% { transform: scale(1); }
+          50% { transform: scale(0.96); }
+          100% { transform: scale(1); }
+        }
+
+        /* ── MOBILE STYLES ── */
+        @media (max-width: 640px) {
+          .page-wrapper {
+            padding: 10px 16px 100px !important;
+            justify-content: flex-start !important;
+            align-items: stretch !important;
+          }
+          .urgency-banner {
+            margin-bottom: 10px !important;
+            padding: 8px 12px !important;
+            font-size: 12px !important;
+          }
+          .page-header {
+            margin-bottom: 10px !important;
+          }
+          .logo-mark {
+            width: 40px !important;
+            height: 40px !important;
+            border-radius: 12px !important;
+          }
+          .header-title {
+            font-size: 20px !important;
+            margin-bottom: 4px !important;
+          }
+          .header-subtitle {
+            font-size: 13px !important;
+            margin-bottom: 6px !important;
+          }
+          .finance-badge {
+            font-size: 12px !important;
+            padding: 6px 12px !important;
+          }
+          /* Collapse social proof after step 1 */
+          .social-proof-section.collapsed {
+            display: none !important;
+          }
+          /* Compact progress: hide step labels, show compact indicator */
+          .step-labels-desktop {
+            display: none !important;
+          }
+          .step-indicator-mobile {
+            display: flex !important;
+          }
+          /* Single column concern grid */
+          .concern-grid {
+            grid-template-columns: 1fr !important;
+          }
+          /* Larger touch targets */
+          .option-card-touch {
+            min-height: 56px !important;
+            padding: 16px !important;
+          }
+          .option-item-touch {
+            min-height: 52px !important;
+            padding: 16px !important;
+          }
+          /* Full-width stacked buttons */
+          .btn-row-mobile {
+            flex-direction: column !important;
+          }
+          .btn-row-mobile button {
+            width: 100% !important;
+            flex: none !important;
+          }
+          /* Form card padding */
+          .form-card {
+            padding: 24px 18px !important;
+          }
+          /* Sticky CTA */
+          .sticky-cta {
+            display: flex !important;
+          }
+          /* Hide inline CTA on mobile when sticky is showing */
+          .inline-cta {
+            display: none !important;
+          }
+          /* Exit popup mobile */
+          .exit-popup {
+            padding: 28px 20px !important;
+            margin: 0 12px !important;
+            border-radius: 16px !important;
+          }
+        }
+
+        /* Desktop: hide mobile-only elements */
+        @media (min-width: 641px) {
+          .step-indicator-mobile {
+            display: none !important;
+          }
+          .sticky-cta {
+            display: none !important;
+          }
         }
       `}</style>
 
-      <div style={s.pageWrapper}>
+      <div style={s.pageWrapper} className="page-wrapper">
         <div style={s.orbTopRight} />
         <div style={s.orbBottomLeft} />
 
         <div style={s.container}>
 
           {/* ── URGENCY BANNER ── */}
-          <div style={s.urgencyBanner}>
+          <div style={s.urgencyBanner} className="urgency-banner">
             <span style={s.urgencyDot} />
             <span suppressHydrationWarning>
               <strong>Only {spotsLeft} free consultation slots left</strong> this month
@@ -307,9 +404,9 @@ export default function SmileJourneyFunnel() {
           </div>
 
           {/* ── HEADER ── */}
-          <div style={s.header}>
+          <div style={s.header} className="page-header">
             <div style={s.logoRow}>
-              <div style={s.logoMark}>
+              <div style={s.logoMark} className="logo-mark">
                 <svg viewBox="0 0 64 64" width={30} height={30} fill="none">
                   <path d="M32 4c-5.5 0-10 1.5-13.5 4.5C15 11.5 13 16 13 21c0 4 1 7.5 2.5 11 1.5 3.5 2.5 7 3 10.5.8 5 2 10 3.5 13.5 1 2.3 2.5 4 4 4s2.5-1 3-3c.5-2 1-4.5 1.5-7h3c.5 2.5 1 5 1.5 7 .5 2 1.5 3 3 3s3-1.7 4-4c1.5-3.5 2.7-8.5 3.5-13.5.5-3.5 1.5-7 3-10.5C50 28.5 51 25 51 21c0-5-2-9.5-5.5-12.5C42 5.5 37.5 4 32 4z" fill="white" />
                   <path d="M25 26c2 3 4.5 4.5 7 4.5s5-1.5 7-4.5" stroke="var(--primary)" strokeWidth="2.5" strokeLinecap="round" fill="none" />
@@ -317,52 +414,64 @@ export default function SmileJourneyFunnel() {
               </div>
               <span style={s.brandName}>CAB Orthodontics</span>
             </div>
-            <h1 style={s.headerTitle}>Start Your Smile Journey</h1>
-            <p style={s.headerSubtitle}>Book your free consultation in under 2 minutes</p>
+            <h1 style={s.headerTitle} className="header-title">Start Your Smile Journey</h1>
+            <p style={s.headerSubtitle} className="header-subtitle">Book your free consultation in under 2 minutes</p>
 
             {/* ── FINANCE MESSAGING ── */}
-            <div style={s.financeBadge}>
+            <div style={s.financeBadge} className="finance-badge">
               Treatments from <strong>£49/month</strong> · 0% finance available
             </div>
           </div>
 
-          {/* ── SOCIAL PROOF STRIP ── */}
-          <div style={s.socialProof}>
-            <div style={s.starRow}>
-              {[1, 2, 3, 4, 5].map((i) => (
-                <svg key={i} viewBox="0 0 20 20" width={16} height={16} fill="#E8A54B">
-                  <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.33L10 13.27l-4.77 2.51.91-5.33L2.27 6.68l5.34-.78L10 1z" />
-                </svg>
-              ))}
-              <span style={s.ratingText}>4.9/5</span>
-              <span style={s.ratingCount}>from 500+ patients</span>
+          {/* ── SOCIAL PROOF STRIP (hidden on step 1) ── */}
+          {currentStep > 1 && (
+            <div
+              style={s.socialProof}
+              className={`social-proof-section${currentStep > 1 ? " collapsed" : ""}`}
+            >
+              <div style={s.starRow}>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <svg key={i} viewBox="0 0 20 20" width={16} height={16} fill="#E8A54B">
+                    <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.33L10 13.27l-4.77 2.51.91-5.33L2.27 6.68l5.34-.78L10 1z" />
+                  </svg>
+                ))}
+                <span style={s.ratingText}>4.9/5</span>
+                <span style={s.ratingCount}>from 500+ patients</span>
+              </div>
+              <div style={s.testimonialCarousel}>
+                {TESTIMONIALS.map((t, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      ...s.testimonialItem,
+                      display: i === activeTestimonial ? "block" : "none",
+                      animation: i === activeTestimonial ? "testimonialFade 4s ease-in-out" : "none",
+                    }}
+                  >
+                    <span style={s.testimonialQuote}>&ldquo;{t.text}&rdquo;</span>
+                    <span style={s.testimonialName}>— {t.name}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div style={s.testimonialCarousel}>
-              {TESTIMONIALS.map((t, i) => (
-                <div
-                  key={i}
-                  style={{
-                    ...s.testimonialItem,
-                    display: i === activeTestimonial ? "block" : "none",
-                    animation: i === activeTestimonial ? "testimonialFade 4s ease-in-out" : "none",
-                  }}
-                >
-                  <span style={s.testimonialQuote}>&ldquo;{t.text}&rdquo;</span>
-                  <span style={s.testimonialName}>— {t.name}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          )}
 
           {!submitted && (
             <>
-              {/* Step labels */}
-              <div style={s.stepLabelRow}>
+              {/* Desktop step labels */}
+              <div style={s.stepLabelRow} className="step-labels-desktop">
                 {STEP_LABELS.map((label, i) => (
                   <span key={label} style={{ ...s.stepLabelText, color: i + 1 === currentStep ? "var(--primary)" : "var(--text-light)" }}>
                     {label}
                   </span>
                 ))}
+              </div>
+
+              {/* Mobile compact indicator */}
+              <div style={s.mobileStepIndicator} className="step-indicator-mobile">
+                <span style={s.mobileStepText}>
+                  Step {currentStep} of 4 — <strong>{STEP_LABELS[currentStep - 1]}</strong>
+                </span>
               </div>
 
               {/* Progress bar */}
@@ -379,7 +488,7 @@ export default function SmileJourneyFunnel() {
           )}
 
           {/* ── CARD ── */}
-          <div style={s.card}>
+          <div ref={cardRef} style={s.card} className="form-card">
             <div style={s.cardTopBorder} />
 
             {/* STEP 1: Contact Details */}
@@ -389,10 +498,10 @@ export default function SmileJourneyFunnel() {
                 <p style={s.stepSubtitle}>Enter your details so we can personalise your smile journey</p>
 
                 {([
-                  { id: "firstName", label: "First Name", placeholder: "e.g. Sarah", type: "text" },
-                  { id: "lastName", label: "Last Name", placeholder: "e.g. Thompson", type: "text" },
-                  { id: "email", label: "Email Address", placeholder: "sarah@example.com", type: "email" },
-                  { id: "phone", label: "Phone Number", placeholder: "e.g. 07700 900000", type: "tel" },
+                  { id: "firstName", label: "First Name", placeholder: "e.g. Sarah", type: "text", inputMode: "text" as const },
+                  { id: "lastName", label: "Last Name", placeholder: "e.g. Thompson", type: "text", inputMode: "text" as const },
+                  { id: "email", label: "Email Address", placeholder: "sarah@example.com", type: "email", inputMode: "email" as const },
+                  { id: "phone", label: "Phone Number", placeholder: "e.g. 07700 900000", type: "tel", inputMode: "tel" as const },
                 ] as const).map((field) => (
                   <div key={field.id} style={s.fieldGroup}>
                     <label style={s.label}>
@@ -400,6 +509,7 @@ export default function SmileJourneyFunnel() {
                     </label>
                     <input
                       type={field.type}
+                      inputMode={field.inputMode}
                       placeholder={field.placeholder}
                       value={formData[field.id]}
                       onChange={(e) => {
@@ -424,7 +534,7 @@ export default function SmileJourneyFunnel() {
                   We&apos;ll never share your details. 100% confidential.
                 </p>
 
-                <div style={s.btnRow}>
+                <div style={s.btnRow} className="btn-row-mobile inline-cta">
                   <button style={s.btnPrimary} onClick={nextStep}>Continue →</button>
                 </div>
               </div>
@@ -436,15 +546,17 @@ export default function SmileJourneyFunnel() {
                 <h2 style={s.stepTitle}>What brings you in?</h2>
                 <p style={s.stepSubtitle}>Select the concerns you&apos;d like to address (choose all that apply)</p>
 
-                <div style={s.optionGrid}>
+                <div style={s.optionGrid} className="concern-grid">
                   {CONCERN_OPTIONS.map((opt) => {
                     const selected = formData.concerns.includes(opt.value);
+                    const isTapped = tappedOption === `concern-${opt.value}`;
                     return (
-                      <div key={opt.value} onClick={() => toggleConcern(opt.value)} style={{
+                      <div key={opt.value} onClick={() => toggleConcern(opt.value)} className="option-card-touch" style={{
                         ...s.optionCard,
                         borderColor: selected ? "var(--primary)" : "var(--border)",
                         background: selected ? "rgba(27,77,110,0.06)" : "var(--bg)",
                         boxShadow: selected ? "0 0 0 3px rgba(27,77,110,0.1)" : "none",
+                        animation: isTapped ? "tapBounce 0.2s ease-out" : "none",
                       }}>
                         {selected && (
                           <div style={s.checkMark}>
@@ -463,14 +575,14 @@ export default function SmileJourneyFunnel() {
 
                 <p style={s.stepEncouragement}>Great progress — just 2 quick questions left!</p>
 
-                <div style={s.btnRow}>
+                <div style={s.btnRow} className="btn-row-mobile inline-cta">
                   <button style={s.btnSecondary} onClick={prevStep}>← Back</button>
                   <button style={s.btnPrimary} onClick={nextStep}>Continue →</button>
                 </div>
               </div>
             )}
 
-            {/* STEP 3: Treatment Preference */}
+            {/* STEP 3: Treatment Preference (auto-advance) */}
             {currentStep === 3 && !submitted && (
               <div style={{ animation: "fadeIn 0.4s ease-out" }}>
                 <h2 style={s.stepTitle}>Preferred treatment</h2>
@@ -479,15 +591,14 @@ export default function SmileJourneyFunnel() {
                 <div style={s.optionList}>
                   {TREATMENT_OPTIONS.map((opt) => {
                     const selected = formData.treatment === opt.value;
+                    const isTapped = tappedOption === `treatment-${opt.value}`;
                     return (
-                      <div key={opt.value} onClick={() => {
-                        setFormData((prev) => ({ ...prev, treatment: opt.value }));
-                        setErrors((prev) => { const next = { ...prev }; delete next.treatment; return next; });
-                      }} style={{
+                      <div key={opt.value} onClick={() => selectTreatmentAndAdvance(opt.value)} className="option-item-touch" style={{
                         ...s.optionItem,
                         borderColor: selected ? "var(--primary)" : "var(--border)",
                         background: selected ? "rgba(27,77,110,0.06)" : "var(--bg)",
                         boxShadow: selected ? "0 0 0 3px rgba(27,77,110,0.1)" : "none",
+                        animation: isTapped ? "tapBounce 0.2s ease-out" : "none",
                       }}>
                         <div style={{
                           ...s.radioCircle,
@@ -505,7 +616,7 @@ export default function SmileJourneyFunnel() {
 
                 <p style={s.stepEncouragement}>Nearly there — one final step!</p>
 
-                <div style={s.btnRow}>
+                <div style={s.btnRow} className="btn-row-mobile inline-cta">
                   <button style={s.btnSecondary} onClick={prevStep}>← Back</button>
                   <button style={s.btnPrimary} onClick={nextStep}>Continue →</button>
                 </div>
@@ -521,15 +632,14 @@ export default function SmileJourneyFunnel() {
                 <div style={s.optionList}>
                   {TIMELINE_OPTIONS.map((opt) => {
                     const selected = formData.timeline === opt.value;
+                    const isTapped = tappedOption === `timeline-${opt.value}`;
                     return (
-                      <div key={opt.value} onClick={() => {
-                        setFormData((prev) => ({ ...prev, timeline: opt.value }));
-                        setErrors((prev) => { const next = { ...prev }; delete next.timeline; return next; });
-                      }} style={{
+                      <div key={opt.value} onClick={() => selectTimelineAndContinue(opt.value)} className="option-item-touch" style={{
                         ...s.optionItem,
                         borderColor: selected ? "var(--primary)" : "var(--border)",
                         background: selected ? "rgba(27,77,110,0.06)" : "var(--bg)",
                         boxShadow: selected ? "0 0 0 3px rgba(27,77,110,0.1)" : "none",
+                        animation: isTapped ? "tapBounce 0.2s ease-out" : "none",
                       }}>
                         <div style={{
                           ...s.radioCircle,
@@ -551,12 +661,17 @@ export default function SmileJourneyFunnel() {
                     {["Yes", "No"].map((opt) => {
                       const val = opt.toLowerCase();
                       const selected = formData.previousTreatment === val;
+                      const isTapped = tappedOption === `prev-${val}`;
                       return (
-                        <div key={val} onClick={() => setFormData((prev) => ({ ...prev, previousTreatment: val }))} style={{
+                        <div key={val} onClick={() => {
+                          triggerTap(`prev-${val}`);
+                          setFormData((prev) => ({ ...prev, previousTreatment: val }));
+                        }} className="option-item-touch" style={{
                           ...s.optionItem,
                           borderColor: selected ? "var(--primary)" : "var(--border)",
                           background: selected ? "rgba(27,77,110,0.06)" : "var(--bg)",
                           boxShadow: selected ? "0 0 0 3px rgba(27,77,110,0.1)" : "none",
+                          animation: isTapped ? "tapBounce 0.2s ease-out" : "none",
                         }}>
                           <div style={{
                             ...s.radioCircle,
@@ -572,7 +687,7 @@ export default function SmileJourneyFunnel() {
                   </div>
                 </div>
 
-                <div style={s.btnRow}>
+                <div style={s.btnRow} className="btn-row-mobile inline-cta">
                   <button style={s.btnSecondary} onClick={prevStep}>← Back</button>
                   <button style={{
                     ...s.btnSubmit,
@@ -610,10 +725,30 @@ export default function SmileJourneyFunnel() {
         </div>
       </div>
 
+      {/* ── STICKY CTA (mobile only) ── */}
+      {!submitted && (
+        <div style={s.stickyCta} className="sticky-cta">
+          {currentStep > 1 && (
+            <button style={s.stickyBtnSecondary} onClick={prevStep}>← Back</button>
+          )}
+          {currentStep < 4 ? (
+            <button style={s.stickyBtnPrimary} onClick={nextStep}>Continue →</button>
+          ) : (
+            <button style={{
+              ...s.stickyBtnSubmit,
+              opacity: submitting ? 0.7 : 1,
+              pointerEvents: submitting ? "none" : "auto",
+            }} onClick={handleSubmit}>
+              {submitting ? "Submitting..." : "Book Free Consultation"}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── EXIT-INTENT POPUP ── */}
       {showExitPopup && (
         <div style={s.exitOverlay} onClick={() => setShowExitPopup(false)}>
-          <div style={s.exitPopup} onClick={(e) => e.stopPropagation()}>
+          <div style={s.exitPopup} className="exit-popup" onClick={(e) => e.stopPropagation()}>
             <button style={s.exitClose} onClick={() => setShowExitPopup(false)}>✕</button>
 
             {!exitSubmitted ? (
@@ -625,6 +760,7 @@ export default function SmileJourneyFunnel() {
                 </p>
                 <input
                   type="tel"
+                  inputMode="tel"
                   placeholder="Your phone number"
                   value={exitPhone}
                   onChange={(e) => setExitPhone(e.target.value)}
@@ -796,6 +932,17 @@ const s: Record<string, React.CSSProperties> = {
     letterSpacing: "0.08em", transition: "color 0.3s",
   },
 
+  mobileStepIndicator: {
+    display: "none",
+    justifyContent: "center",
+    marginBottom: 8,
+    animation: "fadeDown 0.6s ease-out 0.1s both",
+  },
+
+  mobileStepText: {
+    fontSize: 13, color: "var(--text-muted)", fontWeight: 500,
+  },
+
   progressBar: {
     display: "flex", alignItems: "center", gap: 6,
     marginBottom: 24, padding: "0 4px",
@@ -813,6 +960,7 @@ const s: Record<string, React.CSSProperties> = {
     boxShadow: "var(--shadow)", padding: "36px 32px",
     position: "relative", overflow: "hidden",
     border: "1px solid rgba(0,0,0,0.04)",
+    scrollMarginTop: 10,
   },
 
   cardTopBorder: {
@@ -843,7 +991,7 @@ const s: Record<string, React.CSSProperties> = {
   input: {
     width: "100%", padding: "13px 16px",
     border: "1.5px solid var(--border)", borderRadius: 10,
-    fontFamily: "'DM Sans', sans-serif", fontSize: 15,
+    fontFamily: "'DM Sans', sans-serif", fontSize: 16,
     color: "var(--text)", background: "var(--bg)",
     outline: "none", transition: "border-color 0.25s, box-shadow 0.25s, background 0.25s",
   },
@@ -862,6 +1010,7 @@ const s: Record<string, React.CSSProperties> = {
     position: "relative", padding: "16px 14px",
     border: "1.5px solid var(--border)", borderRadius: 12,
     cursor: "pointer", transition: "all 0.25s ease", textAlign: "center",
+    minHeight: 48,
   },
 
   checkMark: {
@@ -880,6 +1029,7 @@ const s: Record<string, React.CSSProperties> = {
     display: "flex", alignItems: "center", gap: 12, padding: "14px 16px",
     border: "1.5px solid var(--border)", borderRadius: 12,
     cursor: "pointer", transition: "all 0.25s ease",
+    minHeight: 48,
   },
 
   radioCircle: {
@@ -899,7 +1049,7 @@ const s: Record<string, React.CSSProperties> = {
 
   btnPrimary: {
     flex: 1, padding: "14px 24px", borderRadius: 10,
-    fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 600,
+    fontFamily: "'DM Sans', sans-serif", fontSize: 16, fontWeight: 600,
     cursor: "pointer", border: "none", background: "var(--primary)",
     color: "white", boxShadow: "0 4px 14px rgba(27,77,110,0.3)",
     transition: "all 0.25s ease",
@@ -907,17 +1057,54 @@ const s: Record<string, React.CSSProperties> = {
 
   btnSecondary: {
     padding: "14px 20px", borderRadius: 10,
-    fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 600,
+    fontFamily: "'DM Sans', sans-serif", fontSize: 16, fontWeight: 600,
     cursor: "pointer", background: "transparent", color: "var(--text-muted)",
     border: "1.5px solid var(--border)", transition: "all 0.25s ease",
   },
 
   btnSubmit: {
     flex: 1, padding: "14px 24px", borderRadius: 10,
-    fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 600,
+    fontFamily: "'DM Sans', sans-serif", fontSize: 16, fontWeight: 600,
     cursor: "pointer", border: "none", background: "var(--accent)",
     color: "white", boxShadow: "0 4px 14px rgba(232,165,75,0.35)",
     transition: "all 0.25s ease",
+  },
+
+  // ── Sticky CTA (mobile)
+  stickyCta: {
+    display: "none",
+    position: "fixed",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: "12px 16px",
+    paddingBottom: "calc(12px + env(safe-area-inset-bottom))",
+    background: "white",
+    borderTop: "1px solid var(--border)",
+    boxShadow: "0 -4px 20px rgba(0,0,0,0.08)",
+    gap: 10,
+    zIndex: 100,
+  },
+
+  stickyBtnPrimary: {
+    flex: 1, padding: "16px 24px", borderRadius: 12,
+    fontFamily: "'DM Sans', sans-serif", fontSize: 16, fontWeight: 600,
+    cursor: "pointer", border: "none", background: "var(--primary)",
+    color: "white", boxShadow: "0 4px 14px rgba(27,77,110,0.3)",
+  },
+
+  stickyBtnSecondary: {
+    padding: "16px 20px", borderRadius: 12,
+    fontFamily: "'DM Sans', sans-serif", fontSize: 16, fontWeight: 600,
+    cursor: "pointer", background: "transparent", color: "var(--text-muted)",
+    border: "1.5px solid var(--border)",
+  },
+
+  stickyBtnSubmit: {
+    flex: 1, padding: "16px 24px", borderRadius: 12,
+    fontFamily: "'DM Sans', sans-serif", fontSize: 16, fontWeight: 600,
+    cursor: "pointer", border: "none", background: "var(--accent)",
+    color: "white", boxShadow: "0 4px 14px rgba(232,165,75,0.35)",
   },
 
   // ── Success
@@ -982,7 +1169,7 @@ const s: Record<string, React.CSSProperties> = {
   exitInput: {
     width: "100%", padding: "14px 16px",
     border: "1.5px solid var(--border)", borderRadius: 10,
-    fontFamily: "'DM Sans', sans-serif", fontSize: 15,
+    fontFamily: "'DM Sans', sans-serif", fontSize: 16,
     color: "var(--text)", background: "var(--bg)",
     outline: "none", marginBottom: 12,
     textAlign: "center",
@@ -990,7 +1177,7 @@ const s: Record<string, React.CSSProperties> = {
 
   exitBtn: {
     width: "100%", padding: "14px 24px", borderRadius: 10,
-    fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 600,
+    fontFamily: "'DM Sans', sans-serif", fontSize: 16, fontWeight: 600,
     cursor: "pointer", border: "none",
     background: "var(--accent)", color: "white",
     boxShadow: "0 4px 14px rgba(232,165,75,0.35)",
